@@ -18,6 +18,8 @@ suppressMessages({
 registerDoMC(cores=8)
 ```
 
+Source code at: https://github.com/apruden/activity-prediction and online version at: http://apruden.github.io/activity-prediction/
+
 In this report we use a prediction algorithm to classify actvity classes from different weight lifting measures from motion sensors. The data was obtained from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information on how data was collected is available a http://groupware.les.inf.puc-rio.br/har. After perfoming some data exploration we apply random forest and SVM algorithms to train a model to predict activity classes from measures. We found that the random forest algorithm provides a good model.
 
 ## Data Exploration
