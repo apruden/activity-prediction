@@ -1,2 +1,3 @@
 # activity-prediction
-Activity Prediction Example
+
+Activity Prediction
