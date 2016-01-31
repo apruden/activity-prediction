@@ -1,0 +1,106 @@
+---
+title: "Activity Prediction from Weigth Lifting Data"
+author: "Alex Prudencio"
+date: "January 29, 2016"
+output: html_document
+---
+```{r, echo=FALSE}
+suppressMessages({
+  library(ggplot2)
+  library(reshape2)
+  library(caret)
+  library(randomForest)
+  library(mlbench)
+  library(doMC)
+  library(kernlab)
+})
+
+registerDoMC(cores=8)
+```
+
+In this report we use a prediction algorithm to classify actvity classes from different weight lifting measures from motion sensors. The data was obtained from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information on how data was collected is available a http://groupware.les.inf.puc-rio.br/har. After perfoming some data exploration we apply random forest and SVM algorithms to train a model to predict activity classes from measures. We found that the random forest algorithm provides a good model.
+
+## Data Exploration
+
+We removed first 7 columns of the original data because they are just book keeping data. Then we looked at missing data and found that there were columns with very little data. Those columns were removed as well as incomplete rows, which clearly were bad measures.
+
+```{r, cache=TRUE}
+if(! file.exists('training.csv'))
+  download.file('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv', 'training.csv', method='curl')
+activityData <- read.csv('training.csv', na.strings=c('NA', ''))
+
+activityData <- activityData[1:nrow(activityData)-1, ]
+activityData <- activityData[, 8:ncol(activityData)]
+validFeatures <- apply(is.na(activityData), 2, sum) == 0
+activityData <- activityData[, validFeatures]
+print(dim(activityData))
+```
+
+We obtained a tidy dataset composed of 52 features and 1 column for labels. We partifion the data in a training and testing data sets. We choose only 50% of data as training data since we have a lot of data.
+```{r, cache=TRUE}
+set.seed(1)
+InTrain <- createDataPartition(y=activityData$classe, p=0.5, list=F)
+training <- activityData[InTrain,]
+testing <- activityData[-InTrain,]
+```
+
+Using a heatmap of the correlation among features que can see that there is some correlation among features. This information will us decide on the machine learning algorithm that we will use.
+
+```{r, fig.align='center', fig.width=6}
+ggplot(melt(abs(cor(training[,1:ncol(training)-1]))), aes(x=Var1, y=Var2, fill=value)) + geom_tile() + scale_fill_gradient(low='white', high='red') +
+  theme(axis.text.y=element_text(size=7), axis.text.x=element_text(angle=45, hjust=1, size=7)) + xlab('') + ylab('') + ggtitle('Correlation Heatmap')
+```
+
+We can see that there is high correlation between some of the features.
+
+## Results
+
+We choose to test two classification algorithmg: Random Forests and SVM. Both algorithms are robust respect of correlation between features. They are also quite robust on the number of features that can be used in the model. In this case we have 52 features.
+
+### Random Forests
+
+We use the recursive feature elimination algorithm to select most important features in the training data. We use cross-validation (10-fold) for the resampling strategy.
+```{r, cache=TRUE, fig.align='center', fig.width=5}
+set.seed(1)
+control <- rfeControl(functions=rfFuncs, method="cv", number = 10)
+results <- rfe(training[, 1:ncol(training)-1], training[, c('classe')],
+               sizes=seq(1, ncol(training)-1, 2), rfeControl=control)
+print(results)
+ggplot(results) + ggtitle('Recursive Feature Elimination')
+```
+We can see that with the selected features we obtain the best results with only `r length(results$optVariables)` features. We use those features to train our random forest model again with same cross-validation strategy.
+```{r, cache=TRUE}
+set.seed(1)
+rfTraining <- training[, c(results$optVariables, 'classe')]
+rfModel <- train(classe ~ ., data=rfTraining, method='rf',
+                trControl=trainControl(method='cv', number=10))
+
+print(rfModel)
+```
+
+We use this model to predict on the testing data and calculate its accuracy:
+```{r}
+rfResult <- predict(rfModel, testing)
+rfAcc <- confusionMatrix(testing$classe, rfResult)$overall['Accuracy']
+print(rfAcc)
+```
+
+Thus, the out of sample error is $`r round(1-rfAcc, 3)`$.
+
+### SVM
+
+We compare the result we obtained with random forest with a SVM model. We use cross-validation (5-fold with 2 repeats) for the resampling strategy.
+```{r, cache=TRUE}
+set.seed(1)
+svmModel <- train(classe ~ ., data=training, method = 'svmRadial',
+                  trControl = trainControl(method = 'cv', number=10, classProbs = T, savePredictions = T))
+print(svmModel)
+svmResult <- predict(svmModel, testing)
+svmAcc <- confusionMatrix(testing$classe, svmResult)$overall['Accuracy']
+print(svmAcc)
+```
+We can see that the random forest method gives a more accurate model.
+
+## Conclusion
+
+We have found that using the random forest algorithm on this data set gives a good model that can be used for prediction of the activity types. The accuracy of this model is $`r round(rfAcc, 3)`$.
